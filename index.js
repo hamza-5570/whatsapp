@@ -1,9 +1,13 @@
 import express from "express";
 import pkg from "whatsapp-web.js";
 const { Client, LocalAuth } = pkg;
-
 import QRCode from "qrcode";
 import cors from "cors";
+import {
+  getSessionData,
+  saveSessionData,
+  removeSessionData,
+} from "./sessionStore.js"; // Implement these functions to interact with your database
 
 const app = express();
 const PORT = process.env.PORT || 3800;
@@ -12,14 +16,17 @@ app.use(express.json());
 app.use(cors());
 
 const clients = new Map();
-const qrCodes = new Map(); // Temporary in-memory QR storage
+const qrCodes = new Map();
 
 // Create and initialize WhatsApp client per user
-function createClient(userId) {
+async function createClient(userId) {
+  const sessionData = await getSessionData(userId);
+
+  // If session data exists, pass it to the client directly
   const client = new Client({
-    authStrategy: new LocalAuth({
-      dataPath: `./sessions/${userId}`, // You can clear this folder on logout
-    }),
+    authStrategy: sessionData
+      ? new LocalAuth({ session: sessionData }) // Use session from DB
+      : new LocalAuth(), // Fallback if session is not in DB
     puppeteer: {
       headless: true,
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
@@ -40,18 +47,20 @@ function createClient(userId) {
     qrCodes.delete(userId); // Remove QR once authenticated
   });
 
-  client.on("authenticated", () => {
+  client.on("authenticated", async (session) => {
     console.log(`Client ${userId} authenticated.`);
+    await saveSessionData(userId, session); // Save session in DB
   });
 
   client.on("auth_failure", (msg) => {
     console.error(`Auth failure for ${userId}:`, msg);
   });
 
-  client.on("disconnected", (reason) => {
+  client.on("disconnected", async (reason) => {
     console.log(`Client ${userId} disconnected: ${reason}`);
     clients.delete(userId);
     qrCodes.delete(userId);
+    await removeSessionData(userId); // Remove session on disconnect
   });
 
   client.initialize();
@@ -60,9 +69,9 @@ function createClient(userId) {
 }
 
 // Get or create WhatsApp client
-function getClient(userId) {
+async function getClient(userId) {
   if (!clients.has(userId)) {
-    return createClient(userId);
+    return await createClient(userId);
   }
   return clients.get(userId);
 }
@@ -82,10 +91,11 @@ function waitForQR(userId, timeoutMs = 5000) {
     }, 300);
   });
 }
+
 // API to get base64 QR code
 app.get("/qr/:userId", async (req, res) => {
   const { userId } = req.params;
-  getClient(userId); // this starts QR gen process if not already
+  await getClient(userId); // this starts QR gen process if not already
 
   // Wait until QR is ready or timeout (5 seconds)
   try {
@@ -123,7 +133,7 @@ app.post("/send-message/:userId", async (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.send("WhatsApp Multi-User SaaS - QR not saved to disk");
+  res.send("WhatsApp Multi-User SaaS with Database Session Storage");
 });
 
 app.listen(PORT, () => {
