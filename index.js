@@ -36,7 +36,7 @@ async function createClient(userId) {
   client.on("qr", async (qr) => {
     try {
       const qrDataUrl = await QRCode.toDataURL(qr);
-      qrCodes.set(userId, qrDataUrl);
+      qrCodes.set(userId, qrDataUrl); // Store the base64 string in memory
     } catch (err) {
       console.error("Error generating QR:", err);
     }
@@ -76,6 +76,7 @@ async function getClient(userId) {
   return clients.get(userId);
 }
 
+// Helper function to wait for QR code generation or timeout
 function waitForQR(userId, timeoutMs = 5000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
@@ -95,12 +96,14 @@ function waitForQR(userId, timeoutMs = 5000) {
 // API to get base64 QR code
 app.get("/qr/:userId", async (req, res) => {
   const { userId } = req.params;
-  await getClient(userId); // this starts QR gen process if not already
 
-  // Wait until QR is ready or timeout (5 seconds)
+  // Ensure the client is created and QR code generation starts
+  await getClient(userId);
+
+  // Wait for the QR code to be generated or timeout after 5 seconds
   try {
     const qr = await waitForQR(userId, 5000);
-    return res.json({ success: true, qr });
+    return res.json({ success: true, qr }); // Send QR code as base64 string
   } catch (err) {
     return res
       .status(408)
@@ -132,10 +135,12 @@ app.post("/send-message/:userId", async (req, res) => {
   }
 });
 
+// Root API
 app.get("/", (req, res) => {
   res.send("WhatsApp Multi-User SaaS with Database Session Storage");
 });
 
+// Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });
