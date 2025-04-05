@@ -34,9 +34,11 @@ async function createClient(userId) {
   });
 
   client.on("qr", async (qr) => {
+    console.log(`QR received for ${userId}`);
     try {
       const qrDataUrl = await QRCode.toDataURL(qr);
       qrCodes.set(userId, qrDataUrl); // Store the base64 string in memory
+      console.log(`QR Code generated for ${userId}`);
     } catch (err) {
       console.error("Error generating QR:", err);
     }
@@ -77,19 +79,22 @@ async function getClient(userId) {
 }
 
 // Helper function to wait for QR code generation or timeout
-function waitForQR(userId, timeoutMs = 5000) {
+function waitForQR(userId, timeoutMs = 10000) {
+  // Extended timeout to 10 seconds
   return new Promise((resolve, reject) => {
     const start = Date.now();
     const interval = setInterval(() => {
       const qr = qrCodes.get(userId);
       if (qr) {
+        console.log(`QR code for ${userId} is ready.`);
         clearInterval(interval);
         resolve(qr);
       } else if (Date.now() - start > timeoutMs) {
+        console.error(`QR code generation timed out for ${userId}`);
         clearInterval(interval);
-        reject(new Error("Timeout"));
+        reject(new Error("QR generation timeout exceeded."));
       }
-    }, 300);
+    }, 5000); // Check every 500ms
   });
 }
 
@@ -102,7 +107,7 @@ app.get("/qr/:userId", async (req, res) => {
 
   // Wait for the QR code to be generated or timeout after 5 seconds
   try {
-    const qr = await waitForQR(userId, 5000);
+    const qr = await waitForQR(userId, 10000);
     return res.json({ success: true, qr }); // Send QR code as base64 string
   } catch (err) {
     return res
