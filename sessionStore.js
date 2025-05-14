@@ -1,58 +1,128 @@
-import mongoose from "mongoose";
-import pkg from "wwebjs-mongo";
-const { MongoStore } = pkg;
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+dotenv.config();
 
-const MONGO_URI =
-  process.env.MONGO_URI ||
-  "mongodb+srv://ameerhamza0331:Hamza5570@cluster0.he5fe.mongodb.net/whatsapp?retryWrites=true&w=majority";
+export const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
-// Connect to MongoDB
-mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-// Optional: Mongoose session schema (used manually if needed)
-const sessionSchema = new mongoose.Schema({
-  userId: { type: String, required: true, unique: true },
-  session: { type: Object, required: true },
-});
-
-const Session = mongoose.model("Session", sessionSchema);
-
-// Custom getSession, saveSession helpers if you're not using RemoteAuth backup (for manual session store)
-export async function getSessionData(userId) {
+async function testSupabaseConnection() {
   try {
-    const record = await Session.findOne({ userId });
-    return record ? record.session : null;
+    const { data, error } = await supabase
+      .from("sessions")
+      .select("*")
+      .limit(1);
+
+    if (error) {
+      console.error("Error connecting to Supabase:", error.message);
+      process.exit(1);
+    }
+    if (data.length === 0) {
+      console.log("Supabase connection successful, but no data found.");
+    } else {
+      console.log("Supabase connection successful, data found.");
+    }
   } catch (err) {
-    console.error("Error fetching session data:", err);
-    return null;
+    console.error("Supabase connection failed:", err.message);
+    process.exit(1);
   }
 }
 
-export async function saveSessionData(userId, session) {
-  try {
-    await Session.findOneAndUpdate(
-      { userId },
-      { session },
-      { upsert: true, new: true }
-    );
-  } catch (err) {
-    console.error("Error saving session data:", err);
+await testSupabaseConnection();
+export class SupabaseStore {
+  constructor() {
+    this.table = "sessions";
+    console.log("SupabaseStore initialized with table:", this.table);
+    this.debug = true; // Enable verbose logging
   }
-}
 
-export async function removeSessionData(userId) {
-  try {
-    await Session.deleteOne({ userId });
-  } catch (err) {
-    console.error("Error deleting session data:", err);
+  log(message) {
+    if (this.debug) console.log(`[SupabaseStore] ${message}`);
   }
-}
 
-// ✅ CORRECT WAY: Return instance of MongoStore (used by RemoteAuth)
-export async function getMongoStore() {
-  const store = new MongoStore({ mongoose }); // no need for .init()
-  return store;
+  async sessionExists(options) {
+    const sessionId = options.session || options.clientId;
+    this.log(`Checking existence for: ${sessionId}`);
+
+    try {
+      const { data, error } = await supabase
+        .from(this.table)
+        .select("*")
+        .eq("client_id", sessionId)
+        .maybeSingle();
+
+      if (error) throw error;
+      this.log(`Session ${sessionId} exists: ${!!data}`);
+      return !!data;
+    } catch (error) {
+      console.error("sessionExists error:", error);
+      return false;
+    }
+  }
+
+  async save(options) {
+    const sessionId = options.session || options.clientId;
+    this.log(`Saving session: ${sessionId}`);
+
+    try {
+      const { error } = await supabase.from(this.table).upsert(
+        {
+          client_id: sessionId,
+          session_data: options.data,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "client_id",
+        }
+      );
+
+      if (error) throw error;
+      this.log(`Session saved successfully: ${sessionId}`);
+      return true;
+    } catch (error) {
+      console.error("save error:", error);
+      return false;
+    }
+  }
+
+  async get(options) {
+    const sessionId = options.session || options.clientId;
+    this.log(`Retrieving session: ${sessionId}`);
+
+    try {
+      const { data, error } = await supabase
+        .from(this.table)
+        .select("session_data")
+        .eq("client_id", sessionId)
+        .single();
+
+      if (error && error.code !== "PGRST116") throw error;
+      this.log(`Session retrieved: ${sessionId}`, !!data);
+      return data?.session_data || null;
+    } catch (error) {
+      console.error("get error:", error);
+      return null;
+    }
+  }
+
+  // Add this critical missing method
+  async delete(options) {
+    const sessionId = options.session || options.clientId;
+    this.log(`Deleting session: ${sessionId}`);
+
+    try {
+      const { error } = await supabase
+        .from(this.table)
+        .delete()
+        .eq("client_id", sessionId);
+
+      if (error) throw error;
+      this.log(`Session deleted: ${sessionId}`);
+      return true;
+    } catch (error) {
+      console.error("delete error:", error);
+      return false;
+    }
+  }
 }

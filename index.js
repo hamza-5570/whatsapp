@@ -1,12 +1,9 @@
 import express from "express";
+import sequelize from "./config/DataBase.js";
+import routes from "./routes/routes.js";
 import pkg from "whatsapp-web.js";
 const { Client, RemoteAuth } = pkg;
-import {
-  getMongoStore,
-  getSessionData,
-  saveSessionData,
-  removeSessionData,
-} from "./sessionStore.js";
+import { SupabaseStore } from "./sessionStore.js";
 import QRCode from "qrcode";
 import cors from "cors";
 
@@ -15,14 +12,21 @@ const PORT = process.env.PORT || 3800;
 
 app.use(express.json());
 app.use(cors());
-
+sequelize
+  .authenticate()
+  .then(() => {
+    console.log("Database connection established successfully.");
+  })
+  .catch((error) => {
+    console.error("Unable to connect to the database:", error);
+  });
 const clients = new Map();
 const qrCodes = new Map();
 
 // 🧠 Create WhatsApp client per user
 async function createClient(userId) {
-  const store = await getMongoStore();
-  console.log("MongoStore initialized", store);
+  const store = await new SupabaseStore();
+  console.log("supabase initialized", store);
   const client = new Client({
     authStrategy: new RemoteAuth({
       store,
@@ -144,7 +148,7 @@ app.post("/send-message/:userId", async (req, res) => {
 app.get("/", (req, res) => {
   res.send("WhatsApp Multi-User API (RemoteAuth + MongoDB)");
 });
-
+app.use("/", routes);
 // 🚀 Start Server
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
