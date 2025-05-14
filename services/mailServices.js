@@ -1,9 +1,9 @@
-import e from "cors";
 import emailservice from "../models/email.js";
 
 class MailServices {
   createEmail = async (emailData) => {
     try {
+      console.log("Creating email with data:", emailData);
       const email = await emailservice.create(emailData);
       return email;
     } catch (error) {

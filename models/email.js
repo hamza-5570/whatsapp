@@ -120,6 +120,10 @@ const Emails = sequelize.define(
     reply_attachments: {
       type: DataTypes.JSONB,
     },
+    user_id: {
+      type: DataTypes.UUID,
+      allowNull: false,
+    },
   },
   {
     tableName: "Emails", // must match the table name in Supabase
