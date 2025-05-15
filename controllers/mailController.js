@@ -20,8 +20,8 @@ class MailController {
       });
       console.log("Token:", token.dataValues.refresh_token);
       oAuthClient.setCredentials({
-        // refresh_token: token.dataValues.refresh_token,
-        refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+        refresh_token: token.dataValues.refresh_token,
+        // refresh_token: process.env.GMAIL_REFRESH_TOKEN,
       });
 
       const { credentials } = await oAuthClient.refreshAccessToken();
