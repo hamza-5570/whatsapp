@@ -4,7 +4,7 @@ class MailServices {
   createEmail = async (emailData) => {
     try {
       console.log("Creating email with data:", emailData);
-      const email = await emailservice.create(emailData);
+      const email = await emailservice.upsert(emailData);
       return email;
     } catch (error) {
       console.error("Error creating email:", error);

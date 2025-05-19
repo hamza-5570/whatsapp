@@ -6,6 +6,7 @@ import messageUtil from "../utilities/message.js";
 import { OAuth2Client } from "google-auth-library";
 import tokenServices from "../services/tokenServices.js";
 import emailservice from "../services/mailServices.js";
+import labelsService from "../services/labelsServices.js";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -15,106 +16,169 @@ const oAuthClient = new OAuth2Client(
 class MailController {
   sendMail = async (req, res) => {
     try {
-      let token = await tokenServices.getTokenByUserId({
+      // 1. Get token from DB
+      const token = await tokenServices.getTokenByUserId({
         user_id: req.body.user_id,
       });
-      console.log("Token:", token.dataValues.refresh_token);
+
+      // 2. Refresh token
       oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
-        // refresh_token: process.env.GMAIL_REFRESH_TOKEN,
       });
-
       const { credentials } = await oAuthClient.refreshAccessToken();
-      // update refresh token and access token
-      tokenServices.updateToken(
-        {
-          user_id: req.body.user_id,
-        },
+
+      // 3. Update token in DB
+      await tokenServices.updateToken(
+        { user_id: req.body.user_id },
         {
           access_token: credentials.access_token,
           refresh_token: credentials.refresh_token,
         }
       );
-      // console.log("Access Token:", credentials);
+
+      // 4. Init Gmail client
       const oAuth2Client = new google.auth.OAuth2();
-      oAuth2Client.setCredentials({
-        access_token: credentials.access_token,
-      });
-      // Step 2: Create Gmail instance
+      oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
-      // console.log("Gmail instance created", gmail);
-      // Step 3: List messages
-      const emailList = [];
-      async function listEmails(labelId = "INBOX") {
-        const res = await gmail.users.messages.list({
-          userId: "me",
-          maxResults: 1,
-          labelIds: [labelId],
-        });
 
-        const messages = res.data.messages || [];
+      // ------------------------
+      // 5. FETCH LABELS & SAVE
+      // ------------------------
+      const labelResponse = await gmail.users.labels.list({ userId: "me" });
+      const allLabels = labelResponse.data.labels || [];
+      // console.log("Fetched Labels:", allLabels);
 
-        for (const msg of messages) {
-          const fullMsg = await gmail.users.messages.get({
-            userId: "me",
-            id: msg.id,
-            format: "full", // to get body and headers
-          });
+      const filteredLabels = allLabels.filter(
+        (label) => !label.name.startsWith("[Imap]/") && label.name !== "UNREAD"
+      );
 
-          const headers = fullMsg.data.payload.headers || [];
-          console.log("Headers:", headers);
-          const getHeader = (name) =>
-            headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
-              ?.value;
+      const labelIds = filteredLabels.map((label) => label.id);
+      // console.log("Filtered Label IDs:", labelIds);
 
-          const fromHeader = getHeader("From");
-          const deliveredTo = getHeader("Delivered-To");
-          const subject = getHeader("Subject");
-          const date = getHeader("Date");
+      // Save to DB
+      await labelsService.createLabels({
+        user_id: req.body.user_id,
+        labels: labelIds,
+        created_at: new Date(),
+      });
 
-          const match = fromHeader?.match(/(.*)<(.*)>/);
-          const senderName = match?.[1]?.trim() || null;
-          const senderEmail = match?.[2]?.trim() || fromHeader;
+      // -------------------------------
+      // 6. Helper: FETCH EMAILS
+      // -------------------------------
+      async function fetchEmails(labelId = "INBOX", maxResults = 10) {
+        const emailList = [];
+        let res;
 
-          const bodyPart =
-            fullMsg.data.payload?.parts?.find(
-              (part) => part.mimeType === "text/plain"
-            ) || fullMsg.data.payload;
+        try {
+          // Special handling for category labels
+          if (labelId.startsWith("CATEGORY_")) {
+            console.log("Fetching category label emails", labelId);
+            const category = labelId.replace("CATEGORY_", "").toLowerCase();
+            console.log("Category:", category);
+            res = await gmail.users.messages.list({
+              userId: "me",
+              q: `category:${category}`,
+              maxResults,
+            });
+          } else {
+            res = await gmail.users.messages.list({
+              userId: "me",
+              labelIds: [labelId],
+              maxResults,
+            });
+          }
 
-          const body = Buffer.from(
-            bodyPart?.body?.data || "",
-            "base64"
-          ).toString("utf8");
+          const messages = res.data.messages || [];
 
-          const emailObject = {
-            email_id: msg.id,
-            received_at: date,
-            body: body,
-            subject: subject,
-            "Sender email": senderEmail,
-            sender: senderName,
-            messagelink: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
-            labels: fullMsg.data.labelIds[fullMsg.data.labelIds.length - 1],
-            deliverdto: deliveredTo,
-            user_id: req.body.user_id,
-          };
+          for (const msg of messages) {
+            const fullMsg = await gmail.users.messages.get({
+              userId: "me",
+              id: msg.id,
+              format: "full",
+            });
 
-          emailList.push(emailObject);
+            const headers = fullMsg.data.payload.headers || [];
+            const getHeader = (name) =>
+              headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
+                ?.value;
+
+            const fromHeader = getHeader("From");
+            const deliveredTo = getHeader("Delivered-To");
+            const subject = getHeader("Subject");
+            const date = getHeader("Date");
+
+            const match = fromHeader?.match(/(.*)<(.*)>/);
+            const senderName = match?.[1]?.trim() || null;
+            const senderEmail = match?.[2]?.trim() || fromHeader;
+
+            const bodyPart =
+              fullMsg.data.payload?.parts?.find(
+                (part) => part.mimeType === "text/plain"
+              ) || fullMsg.data.payload;
+
+            const body = Buffer.from(
+              bodyPart?.body?.data || "",
+              "base64"
+            ).toString("utf8");
+
+            const emailObject = {
+              email_id: msg.id,
+              received_at: date,
+              body: body,
+              subject: subject,
+              "Sender email": senderEmail,
+              sender: senderName,
+              messagelink: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
+              labels:
+                fullMsg.data.labelIds?.[fullMsg.data.labelIds.length - 1] ||
+                labelId,
+              deliverdto: deliveredTo,
+              user_id: req.body.user_id,
+            };
+
+            emailList.push(emailObject);
+          }
+        } catch (err) {
+          console.error(
+            `Error fetching emails for label ${labelId}:`,
+            err.message
+          );
         }
 
-        console.log(emailList);
         return emailList;
       }
 
-      await listEmails().catch(console.error);
-
-      let email = await emailservice.createEmail(emailList[0]);
-      if (!email) {
-        return Response.ExistallReady(res, messageUtil.EMAIL_EXIST);
+      // -------------------------------
+      // 7. Fetch and Save INBOX Emails
+      // -------------------------------
+      const inboxEmails = await fetchEmails("INBOX", 10);
+      for (const email of inboxEmails) {
+        await emailservice.createEmail(email);
       }
-      return Response.success(res, messageUtil.OK);
+
+      // Send inbox response immediately
+      Response.success(res, inboxEmails);
+
+      // ------------------------------------
+      // 8. BACKGROUND: FETCH OTHER LABELS
+      // ------------------------------------
+      (async () => {
+        for (const labelId of labelIds) {
+          try {
+            const emails = await fetchEmails(labelId, 50);
+            for (const email of emails) {
+              await emailservice.createEmail(email); // Handle duplicates in service
+            }
+          } catch (err) {
+            console.error(
+              `Background error for label ${labelId}:`,
+              err.message
+            );
+          }
+        }
+      })();
     } catch (error) {
-      console.error("Error sending email:", error);
+      console.error("sendMail error:", error);
       return Response.serverError(res, error);
     }
   };

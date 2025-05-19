@@ -5,51 +5,73 @@ const Emails = sequelize.define(
   "Emails",
   {
     id: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.BIGINT,
       primaryKey: true,
       autoIncrement: true,
     },
+    created_at: {
+      type: DataTypes.DATE,
+      defaultValue: DataTypes.NOW,
+    },
     email_id: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     sender: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     subject: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     body: {
       type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    received_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
     },
     "Sender email": {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     draft_reply: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     Status: {
-      type: DataTypes.TEXT,
+      type: DataTypes.ENUM("open", "closed"),
+      defaultValue: "open",
     },
     edited_draft_reply: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     sent_at: {
       type: DataTypes.DATE,
+      allowNull: true,
     },
     attachments: {
       type: DataTypes.JSONB,
+      allowNull: true,
     },
     response_required: {
       type: DataTypes.BOOLEAN,
+      defaultValue: false,
     },
     response_received_at: {
       type: DataTypes.DATE,
+      allowNull: true,
     },
     error_message: {
       type: DataTypes.TEXT,
+      allowNull: true,
     },
     labels: {
-      type: DataTypes.JSONB,
+      type: DataTypes.TEXT, // Changed to TEXT
+      allowNull: true, // Allow null values
     },
     messagelink: {
       type: DataTypes.TEXT,
@@ -122,13 +144,18 @@ const Emails = sequelize.define(
     },
     user_id: {
       type: DataTypes.UUID,
-      allowNull: false,
+      allowNull: true,
     },
   },
   {
-    tableName: "Emails", // must match the table name in Supabase
+    tableName: "Emails",
     timestamps: false,
+    indexes: [
+      {
+        unique: true,
+        fields: ["email_id"],
+      },
+    ],
   }
 );
-
 export default Emails;
