@@ -7,6 +7,7 @@ import { OAuth2Client } from "google-auth-library";
 import tokenServices from "../services/tokenServices.js";
 import emailservice from "../services/mailServices.js";
 import labelsService from "../services/labelsServices.js";
+import cleanEmailWithClaude from "../utilities/claude.js";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -52,7 +53,7 @@ class MailController {
         (label) => !label.name.startsWith("[Imap]/") && label.name !== "UNREAD"
       );
 
-      const labelIds = filteredLabels.map((label) => label.id);
+      const labelIds = filteredLabels.map((label) => label.name);
       // console.log("Filtered Label IDs:", labelIds);
 
       // Save to DB
@@ -120,11 +121,16 @@ class MailController {
               bodyPart?.body?.data || "",
               "base64"
             ).toString("utf8");
+            const cleanedBody = await cleanEmailWithClaude({
+              rawEmail: body,
+              from: senderName,
+              date: date,
+            });
 
             const emailObject = {
               email_id: msg.id,
               received_at: date,
-              body: body,
+              body: cleanedBody,
               subject: subject,
               "Sender email": senderEmail,
               sender: senderName,
