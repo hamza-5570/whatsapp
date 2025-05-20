@@ -163,7 +163,7 @@ class MailController {
       }
 
       // Send inbox response immediately
-      Response.success(res, inboxEmails);
+      Response.success(res, messageUtil.OK, inboxEmails);
 
       // ------------------------------------
       // 8. BACKGROUND: FETCH OTHER LABELS
