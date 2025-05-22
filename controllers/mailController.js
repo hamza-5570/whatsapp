@@ -10,6 +10,7 @@ import emailservice from "../services/mailServices.js";
 import labelsService from "../services/labelsServices.js";
 import cleanEmailWithClaude from "../utilities/claude.js";
 import sendPromptWithEmail from "../utilities/openAi.js";
+import { prompt, promptForReply } from "../utilities/prompt.js";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -23,7 +24,6 @@ class MailController {
       const token = await tokenServices.getTokenByUserId({
         user_id: req.body.user_id,
       });
-      console.log("Token from DB:", token);
       // 2. Refresh token
       oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
@@ -49,8 +49,14 @@ class MailController {
       // ------------------------
       const labelResponse = await gmail.users.labels.list({ userId: "me" });
       const allLabels = labelResponse.data.labels || [];
-      // console.log("Fetched Labels:", allLabels);
 
+      // Create cleaned list of labels (removing [Imap]/ and CATEGORY_ only)
+      const cleanedAllLabels = allLabels.filter(
+        (label) =>
+          !label.name.startsWith("[Imap]/") && !label.id.startsWith("CATEGORY_")
+      );
+
+      // Save only non-default/system labels (you can use Set or just reuse the list)
       const systemLabels = new Set([
         "INBOX",
         "SENT",
@@ -59,36 +65,28 @@ class MailController {
         "SPAM",
         "STARRED",
         "IMPORTANT",
-        "CATEGORY_PERSONAL",
-        "CATEGORY_SOCIAL",
-        "CATEGORY_PROMOTIONS",
-        "CATEGORY_UPDATES",
-        "CATEGORY_FORUMS",
         "CHAT",
         "UNREAD",
       ]);
 
-      const filteredLabels = allLabels.filter(
-        (label) =>
-          !label.name.startsWith("[Imap]/") &&
-          !systemLabels.has(label.id) && // Exclude default labels by ID
-          !label.id.startsWith("CATEGORY_")
+      const filteredLabels = cleanedAllLabels.filter(
+        (label) => !systemLabels.has(label.id)
       );
 
-      const labelIds = filteredLabels.map((label) => {
-        return {
-          id: label.id,
-          name: label.name,
-        };
-      });
-      // console.log("Filtered Label IDs:", labelIds);
+      // This is for saving to DB
+      const labelIdsToSave = filteredLabels.map((label) => ({
+        id: label.id,
+        name: label.name,
+      }));
 
-      // Save to DB
       await labelsService.createLabels({
         user_id: req.body.user_id,
-        labels: labelIds,
+        labels: labelIdsToSave,
         created_at: new Date(),
       });
+
+      // This is for email fetching (includes system labels but excludes Imap/CATEGORY_)
+      const allLabelIds = cleanedAllLabels.map((label) => label.id);
 
       // -------------------------------
       // 6. Helper: FETCH EMAILS
@@ -164,7 +162,7 @@ class MailController {
               messagelink: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
               labels:
                 fullMsg.data.labelIds?.[fullMsg.data.labelIds.length - 1] ||
-                labelId,
+                allLabelIds,
               deliverdto: deliveredTo,
               user_id: req.body.user_id,
             };
@@ -173,7 +171,7 @@ class MailController {
           }
         } catch (err) {
           console.error(
-            `Error fetching emails for label ${labelId}:`,
+            `Error fetching emails for label ${allLabelIds}:`,
             err.message
           );
         }
@@ -196,9 +194,13 @@ class MailController {
       // 8. BACKGROUND: FETCH OTHER LABELS
       // ------------------------------------
       (async () => {
-        for (const labelId of labelIds) {
+        console.log("Fetching emails for all labels in the background...");
+        for (const labelId of allLabelIds) {
+          console.log("Fetching emails for label:", labelId);
           try {
             const emails = await fetchEmails(labelId, 50);
+            let count = 0;
+            console.log("Fetched emails:", count++);
             for (const email of emails) {
               await emailservice.createEmail(email); // Handle duplicates in service
             }
@@ -246,7 +248,7 @@ class MailController {
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
       // give email to openai
 
-      const emailResponse = await sendPromptWithEmail({
+      const fullPrompt = prompt({
         subject: req.body.subject,
         body: req.body.body,
         sender: req.body.Sender_email,
@@ -254,6 +256,9 @@ class MailController {
         emailInstructions: req.body.emailInstructions,
         textLength: req.body.Text_length,
         writingTone: req.body.Writing_tone,
+      });
+      const emailResponse = await sendPromptWithEmail({
+        fullPrompt: fullPrompt,
       });
       const turndownService = new TurndownService();
       const markdown = turndownService.turndown(emailResponse);
@@ -273,18 +278,81 @@ class MailController {
       });
 
       console.log("Draft created:", draftResponse.data);
-      // update email status
-      await emailservice.updateEmail(
-        { draft_reply: markdown },
-        {
-          email_id: req.body.email_id,
-          user_id,
-        }
-      );
+
+      // create email status
+      await emailservice.createEmail({
+        email_id: draftResponse.data.id,
+        received_at: new Date(),
+        body: req.body.body,
+        subject: req.body.subject,
+        draft_reply: rawMessage,
+        "Sender email": req.body.Sender_email,
+        messagelink: `https://mail.google.com/mail/u/0/#inbox/${draftResponse.data.id}`,
+        labels: "DRAFT",
+        deliverdto: req.body.deliverdto,
+        user_id: user_id,
+      });
 
       Response.success(res, messageUtil.OK);
     } catch (error) {
       console.error("CreateDraft error:", error);
+      return Response.serverError(res, error);
+    }
+  };
+
+  sendEmail = async (req, res) => {
+    try {
+      const { user_id } = req.body;
+
+      // 1. Get token from DB
+      const token = await tokenServices.getTokenByUserId({
+        user_id: user_id,
+      });
+
+      // 2. Refresh token
+      oAuthClient.setCredentials({
+        refresh_token: token.dataValues.refresh_token,
+      });
+      const { credentials } = await oAuthClient.refreshAccessToken();
+
+      // 3. Update token in DB
+      await tokenServices.updateToken(
+        { user_id: user_id },
+        {
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token,
+        }
+      );
+
+      // 4. Init Gmail client
+      const oAuth2Client = new google.auth.OAuth2();
+      oAuth2Client.setCredentials({ access_token: credentials.access_token });
+      const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+      let fullprompt = promptForReply({ body: req.body.body });
+      const emailResponse = await sendPromptWithEmail({
+        fullPrompt: fullprompt,
+      });
+
+      // 5. Create email
+      const rawMessage = Buffer.from(
+        `to: ${"hafizameerhamza87@gmail.com"}\nSubject: ${
+          req.body.subject
+        }\n\n${emailResponse}`
+      ).toString("base64");
+
+      const sendResponse = await gmail.users.messages.send({
+        userId: "me",
+        requestBody: {
+          raw: rawMessage,
+        },
+      });
+
+      console.log("Email sent:", sendResponse.data);
+
+      Response.success(res, messageUtil.OK);
+    } catch (error) {
+      console.error("sendEmail error:", error);
       return Response.serverError(res, error);
     }
   };

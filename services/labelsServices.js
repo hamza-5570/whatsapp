@@ -3,7 +3,6 @@ import Labels from "../models/labels.js";
 class LabelsServices {
   createLabels = async (labelsData) => {
     try {
-      console.log("Creating labels with data:", labelsData);
       const labels = await Labels.upsert(labelsData);
       return labels;
     } catch (error) {
