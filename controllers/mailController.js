@@ -1,6 +1,7 @@
 import { google } from "googleapis";
 import dotenv from "dotenv";
 dotenv.config();
+import TurndownService from "turndown";
 import Response from "../utilities/response.js";
 import messageUtil from "../utilities/message.js";
 import { OAuth2Client } from "google-auth-library";
@@ -8,6 +9,7 @@ import tokenServices from "../services/tokenServices.js";
 import emailservice from "../services/mailServices.js";
 import labelsService from "../services/labelsServices.js";
 import cleanEmailWithClaude from "../utilities/claude.js";
+import sendPromptWithEmail from "../utilities/openAi.js";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -185,6 +187,79 @@ class MailController {
       })();
     } catch (error) {
       console.error("sendMail error:", error);
+      return Response.serverError(res, error);
+    }
+  };
+
+  CreateDraft = async (req, res) => {
+    try {
+      const { user_id } = req.body;
+
+      // 1. Get token from DB
+      const token = await tokenServices.getTokenByUserId({
+        user_id: user_id,
+      });
+
+      // 2. Refresh token
+      oAuthClient.setCredentials({
+        refresh_token: token.dataValues.refresh_token,
+      });
+      const { credentials } = await oAuthClient.refreshAccessToken();
+
+      // 3. Update token in DB
+      await tokenServices.updateToken(
+        { user_id: user_id },
+        {
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token,
+        }
+      );
+
+      // 4. Init Gmail client
+      const oAuth2Client = new google.auth.OAuth2();
+      oAuth2Client.setCredentials({ access_token: credentials.access_token });
+      const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+      // give email to openai
+
+      const emailResponse = await sendPromptWithEmail({
+        subject: req.body.subject,
+        body: req.body.body,
+        sender: req.body.Sender_email,
+        date: req.body.date,
+        emailInstructions: req.body.emailInstructions,
+        textLength: req.body.Text_length,
+        writingTone: req.body.Writing_tone,
+      });
+      const turndownService = new TurndownService();
+      const markdown = turndownService.turndown(emailResponse);
+      console.log("Email Response:", markdown);
+      // 5. Create draft
+      const rawMessage = Buffer.from(
+        `Subject: ${req.body.subject}\n\n${emailResponse}`
+      ).toString("base64");
+
+      const draftResponse = await gmail.users.drafts.create({
+        userId: "me",
+        requestBody: {
+          message: {
+            raw: rawMessage,
+          },
+        },
+      });
+
+      console.log("Draft created:", draftResponse.data);
+      // update email status
+      await emailservice.updateEmail(
+        { draft_reply: markdown },
+        {
+          email_id: req.body.email_id,
+          user_id,
+        }
+      );
+
+      Response.success(res, messageUtil.OK);
+    } catch (error) {
+      console.error("CreateDraft error:", error);
       return Response.serverError(res, error);
     }
   };
