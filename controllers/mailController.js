@@ -23,7 +23,7 @@ class MailController {
       const token = await tokenServices.getTokenByUserId({
         user_id: req.body.user_id,
       });
-
+      console.log("Token from DB:", token);
       // 2. Refresh token
       oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
@@ -51,11 +51,36 @@ class MailController {
       const allLabels = labelResponse.data.labels || [];
       // console.log("Fetched Labels:", allLabels);
 
+      const systemLabels = new Set([
+        "INBOX",
+        "SENT",
+        "TRASH",
+        "DRAFT",
+        "SPAM",
+        "STARRED",
+        "IMPORTANT",
+        "CATEGORY_PERSONAL",
+        "CATEGORY_SOCIAL",
+        "CATEGORY_PROMOTIONS",
+        "CATEGORY_UPDATES",
+        "CATEGORY_FORUMS",
+        "CHAT",
+        "UNREAD",
+      ]);
+
       const filteredLabels = allLabels.filter(
-        (label) => !label.name.startsWith("[Imap]/") && label.name !== "UNREAD"
+        (label) =>
+          !label.name.startsWith("[Imap]/") &&
+          !systemLabels.has(label.id) && // Exclude default labels by ID
+          !label.id.startsWith("CATEGORY_")
       );
 
-      const labelIds = filteredLabels.map((label) => label.name);
+      const labelIds = filteredLabels.map((label) => {
+        return {
+          id: label.id,
+          name: label.name,
+        };
+      });
       // console.log("Filtered Label IDs:", labelIds);
 
       // Save to DB

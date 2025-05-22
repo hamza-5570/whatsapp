@@ -1,12 +1,12 @@
 import { DataTypes } from "sequelize";
-import sequelize from "../config/DataBase.js";
+import Sequelize from "../config/DataBase.js";
 
-const Labels = sequelize.define(
-  "Labels",
+const Labels = Sequelize.define(
+  "labels",
   {
     created_at: {
       type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
+      allowNull: false,
     },
     user_id: {
       type: DataTypes.UUID,
@@ -14,8 +14,8 @@ const Labels = sequelize.define(
       primaryKey: true,
     },
     labels: {
-      type: DataTypes.ARRAY(DataTypes.STRING),
-      allowNull: false,
+      type: DataTypes.JSON,
+      allowNull: true,
     },
   },
   {
