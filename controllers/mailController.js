@@ -329,16 +329,14 @@ class MailController {
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
-      let fullprompt = promptForReply({ body: req.body.body });
+      let fullprompt = promptForReply({ body: req.body.edited_draft_reply });
       const emailResponse = await sendPromptWithEmail({
         fullPrompt: fullprompt,
       });
 
       // 5. Create email
       const rawMessage = Buffer.from(
-        `to: ${"hafizameerhamza87@gmail.com"}\nSubject: ${
-          req.body.subject
-        }\n\n${emailResponse}`
+        `to: ${req.body.Deliverdto}\nSubject: ${req.body.subject}\n\n${emailResponse}`
       ).toString("base64");
 
       const sendResponse = await gmail.users.messages.send({
