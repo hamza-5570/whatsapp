@@ -292,7 +292,14 @@ class MailController {
         deliverdto: req.body.deliverdto,
         user_id: user_id,
       });
-
+      // update email
+      await emailservice.updateEmail(
+        { email_id: req.body.email_id },
+        {
+          draft_reply: rawMessage,
+          edited_draft_reply: markdown,
+        }
+      );
       Response.success(res, messageUtil.OK);
     } catch (error) {
       console.error("CreateDraft error:", error);
