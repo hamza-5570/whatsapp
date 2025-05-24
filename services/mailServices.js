@@ -14,7 +14,7 @@ class MailServices {
   getEmailById = async (query) => {
     try {
       const email = await emailservice.findOne({
-        where: { email_id: query.email_id },
+        where: { ...query },
       });
       return email;
     } catch (error) {
@@ -25,9 +25,10 @@ class MailServices {
 
   updateEmail = async (data, query) => {
     try {
-      const email = await emailservice.update(data, {
-        where: { ...query },
+      const email = await emailservice.update(query, {
+        where: data,
       });
+      return email;
     } catch (error) {}
   };
 }

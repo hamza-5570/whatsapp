@@ -146,6 +146,10 @@ const Emails = sequelize.define(
       type: DataTypes.UUID,
       allowNull: true,
     },
+    draft_email_id: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   },
   {
     tableName: "Emails",

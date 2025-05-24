@@ -11,6 +11,7 @@ import labelsService from "../services/labelsServices.js";
 import cleanEmailWithClaude from "../utilities/claude.js";
 import sendPromptWithEmail from "../utilities/openAi.js";
 import { prompt, promptForReply } from "../utilities/prompt.js";
+import e from "cors";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -265,7 +266,7 @@ class MailController {
       console.log("Email Response:", markdown);
       // 5. Create draft
       const rawMessage = Buffer.from(
-        `Subject: ${req.body.subject}\n\n${emailResponse}`
+        `to: ${req.body.Sender_email}\nSubject: ${req.body.subject}\n\n${emailResponse}`
       ).toString("base64");
 
       const draftResponse = await gmail.users.drafts.create({
@@ -280,26 +281,28 @@ class MailController {
       console.log("Draft created:", draftResponse.data);
 
       // create email status
-      await emailservice.createEmail({
+      const newmail = await emailservice.createEmail({
         email_id: draftResponse.data.id,
         received_at: new Date(),
         body: req.body.body,
         subject: req.body.subject,
-        draft_reply: rawMessage,
+        draft_reply: markdown,
         "Sender email": req.body.Sender_email,
-        messagelink: `https://mail.google.com/mail/u/0/#inbox/${draftResponse.data.id}`,
+        messagelink: `https://mail.google.com/mail/u/0/#inbox/${req.body.email_id}`,
         labels: "DRAFT",
         deliverdto: req.body.deliverdto,
         user_id: user_id,
       });
+      console.log("Draft created:", newmail);
       // update email
-      await emailservice.updateEmail(
-        { email_id: req.body.email_id },
+      const update = await emailservice.updateEmail(
+        { id: req.body.id },
         {
-          draft_reply: rawMessage,
-          edited_draft_reply: markdown,
+          draft_reply: markdown,
+          draft_email_id: draftResponse.data.id,
         }
       );
+      console.log("Draft updated:", update);
       Response.success(res, messageUtil.OK);
     } catch (error) {
       console.error("CreateDraft error:", error);
@@ -336,24 +339,43 @@ class MailController {
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
-      let fullprompt = promptForReply({ body: req.body.edited_draft_reply });
-      const emailResponse = await sendPromptWithEmail({
-        fullPrompt: fullprompt,
+      // let fullprompt = promptForReply({ body: req.body.edited_draft_reply });
+      // const emailResponse = await sendPromptWithEmail({
+      //   fullPrompt: fullprompt,
+      // });
+
+      // // 5. Create email
+      // const rawMessage = Buffer.from(
+      //   `to: ${req.body.Deliverdto}\nSubject: ${req.body.subject}\n\n${emailResponse}`
+      // ).toString("base64");
+
+      // get email
+      const email = await emailservice.getEmailById({
+        id: req.body.id,
       });
 
-      // 5. Create email
-      const rawMessage = Buffer.from(
-        `to: ${req.body.Deliverdto}\nSubject: ${req.body.subject}\n\n${emailResponse}`
-      ).toString("base64");
-
-      const sendResponse = await gmail.users.messages.send({
+      const mail = await gmail.users.drafts.send({
         userId: "me",
         requestBody: {
-          raw: rawMessage,
+          id: email.dataValues.draft_email_id,
         },
       });
+      // update email
+      await emailservice.updateEmail(
+        { id: req.body.id },
+        {
+          draft_reply: null,
+          draft_email_id: null,
+        }
+      );
 
-      console.log("Email sent:", sendResponse.data);
+      // update email status
+      await emailservice.updateEmail(
+        { email_id: mail.data.id },
+        {
+          labels: "SENT",
+        }
+      );
 
       Response.success(res, messageUtil.OK);
     } catch (error) {
