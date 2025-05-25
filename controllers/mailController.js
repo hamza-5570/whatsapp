@@ -251,12 +251,13 @@ class MailController {
 
       const fullPrompt = prompt({
         subject: req.body.subject,
-        body: req.body.body,
+        body: req.body.content,
         sender: req.body.Sender_email,
         date: req.body.date,
-        emailInstructions: req.body.emailInstructions,
+        emailInstructions: req.body.Email_Instructions,
         textLength: req.body.Text_length,
         writingTone: req.body.Writing_tone,
+        user_name: req.body.user_name,
       });
       const emailResponse = await sendPromptWithEmail({
         fullPrompt: fullPrompt,
@@ -266,8 +267,15 @@ class MailController {
       console.log("Email Response:", markdown);
       // 5. Create draft
       const rawMessage = Buffer.from(
-        `to: ${req.body.Sender_email}\nSubject: ${req.body.subject}\n\n${emailResponse}`
-      ).toString("base64");
+        `To: ${req.body.Sender_email}\r\n` +
+          `Subject: ${req.body.subject}\r\n` +
+          `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
+          emailResponse
+      )
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
 
       const draftResponse = await gmail.users.drafts.create({
         userId: "me",
@@ -280,17 +288,15 @@ class MailController {
 
       console.log("Draft created:", draftResponse.data);
 
-      // create email status
+      // create email supabase
       const newmail = await emailservice.createEmail({
         email_id: draftResponse.data.id,
-        received_at: new Date(),
-        body: req.body.body,
+        body: markdown,
         subject: req.body.subject,
-        draft_reply: markdown,
-        "Sender email": req.body.Sender_email,
+        "Sender email": req.body.Deliverdto,
         messagelink: `https://mail.google.com/mail/u/0/#inbox/${req.body.email_id}`,
         labels: "DRAFT",
-        deliverdto: req.body.deliverdto,
+        deliverdto: req.body.Sender_email,
         user_id: user_id,
       });
       console.log("Draft created:", newmail);

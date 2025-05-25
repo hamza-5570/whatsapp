@@ -16,7 +16,7 @@ Generate an appropriate HTML email response to the provided inquiry by:
 From:  ${query.sender}
 When: ${query.date}
 Subject: ${query.subject}
-Body: ${query.body}
+Body: ${query.content}
     
 2. *Email Instructions and text length.*
     
@@ -61,7 +61,7 @@ Finish email with the below html signature:
 
 <div style="font-family: Arial, sans-serif; padding: 20px 0; border-left: 3px solid #3498db; padding-left: 10px;">
     <div style="margin-bottom: 5px;">
-        <span style="font-size: 16px; font-weight: bold; color: #2c3e50;">Paul van Loenen</span>
+        <span style="font-size: 16px; font-weight: bold; color: #2c3e50;">${query.user_name}</span>
     </div>
     <div style="font-size: 14px; color: #7f8c8d;">
         AI-DID_IT
