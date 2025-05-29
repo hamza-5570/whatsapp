@@ -316,6 +316,127 @@ class MailController {
     }
   };
 
+  // if daraf exist update it, if not create it
+
+  UpdateDraft = async (req, res) => {
+    try {
+      const { user_id } = req.body;
+
+      // 1. Get token from DB
+      const token = await tokenServices.getTokenByUserId({
+        user_id: user_id,
+      });
+
+      // 2. Refresh token
+      oAuthClient.setCredentials({
+        refresh_token: token.dataValues.refresh_token,
+      });
+      const { credentials } = await oAuthClient.refreshAccessToken();
+
+      // 3. Update token in DB
+      await tokenServices.updateToken(
+        { user_id: user_id },
+        {
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token,
+        }
+      );
+
+      // 4. Init Gmail client
+      const oAuth2Client = new google.auth.OAuth2();
+      oAuth2Client.setCredentials({ access_token: credentials.access_token });
+      const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+      // get email
+      const email = await emailservice.getEmailById({
+        id: req.body.id,
+      });
+
+      if (email.dataValues.draft_email_id) {
+        // update draft
+        const rawMessage = Buffer.from(
+          `To: ${req.body.Deliverdto}\r\n` +
+            `Subject: ${req.body.subject}\r\n` +
+            `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
+            req.body.content
+        )
+          .toString("base64")
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+
+        const draftResponse = await gmail.users.drafts.update({
+          userId: "me",
+          id: email.dataValues.draft_email_id,
+          requestBody: {
+            message: {
+              raw: rawMessage,
+            },
+          },
+        });
+
+        console.log("Draft updated:", draftResponse.data);
+        // update email supabase
+        const update = await emailservice.updateEmail(
+          {
+            id: req.body.id,
+          },
+          {
+            draft_reply: req.body.content,
+          }
+        );
+        console.log("Draft updated in DB:", update);
+        Response.success(res, messageUtil.OK);
+      } else {
+        // create draft
+        const rawMessage = Buffer.from(
+          `To: ${req.body.Deliverdto}\r\n` +
+            `Subject: ${req.body.subject}\r\n` +
+            `Content-Type: text/html; charset="UTF-8"\r\n\r\n` +
+            req.body.content
+        )
+          .toString("base64")
+          .replace(/\+/g, "-")
+          .replace(/\//g, "_")
+          .replace(/=+$/, "");
+        const draftResponse = await gmail.users.drafts.create({
+          userId: "me",
+          requestBody: {
+            message: {
+              raw: rawMessage,
+            },
+          },
+        });
+        console.log("Draft created:", draftResponse.data);
+        // create email supabase
+        const newmail = await emailservice.createEmail({
+          email_id: draftResponse.data.id,
+          body: req.body.edited_draft_reply,
+          subject: req.body.subject,
+          "Sender email": req.body.Deliverdto,
+          messagelink: `https://mail.google.com/mail/u/0/#inbox/${req.body.email_id}`,
+          labels: "DRAFT",
+          deliverdto: req.body.Sender_email,
+          user_id: user_id,
+        });
+        console.log("Draft created:", newmail);
+        // update email
+        const update = await emailservice.updateEmail(
+          { id: req.body.id },
+          {
+            draft_reply: req.body.content,
+            draft_email_id: draftResponse.data.id,
+          }
+        );
+        console.log("Draft updated:", update);
+        Response.success(res, messageUtil.OK);
+      }
+    } catch (error) {
+      console.error("updateDraft error:", error);
+      return Response.serverError(res, error);
+    }
+  };
+
   sendEmail = async (req, res) => {
     try {
       const { user_id } = req.body;
