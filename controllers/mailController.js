@@ -11,7 +11,7 @@ import labelsService from "../services/labelsServices.js";
 import cleanEmailWithClaude from "../utilities/claude.js";
 import sendPromptWithEmail from "../utilities/openAi.js";
 import { prompt, promptForReply } from "../utilities/prompt.js";
-import e from "cors";
+import encrypt from "../utilities/encrypt.js";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -204,7 +204,7 @@ class MailController {
             const emailObject = {
               email_id: msg.id,
               received_at: date,
-              body: cleanedBody,
+              body: encrypt(cleanedBody), // Encrypt the body
               subject: subject,
               "Sender email": senderEmail,
               sender: senderName,
@@ -340,7 +340,7 @@ class MailController {
       // create email supabase
       const newmail = await emailservice.createEmail({
         email_id: draftResponse.data.id,
-        body: markdown,
+        body: encrypt(markdown), // Encrypt the body
         subject: req.body.subject,
         "Sender email": req.body.Deliverdto,
         messagelink: `https://mail.google.com/mail/u/0/#inbox/${req.body.email_id}`,
@@ -353,7 +353,7 @@ class MailController {
       const update = await emailservice.updateEmail(
         { id: req.body.id },
         {
-          draft_reply: markdown,
+          draft_reply: encrypt(markdown), // Encrypt the body
           draft_email_id: draftResponse.data.id,
         }
       );
@@ -431,7 +431,7 @@ class MailController {
             id: req.body.id,
           },
           {
-            draft_reply: req.body.content,
+            draft_reply: encrypt(req.body.content), // Encrypt the body
           }
         );
         console.log("Draft updated in DB:", update);
@@ -460,7 +460,7 @@ class MailController {
         // create email supabase
         const newmail = await emailservice.createEmail({
           email_id: draftResponse.data.id,
-          body: req.body.edited_draft_reply,
+          body: encrypt(req.body.content), // Encrypt the body
           subject: req.body.subject,
           "Sender email": req.body.Deliverdto,
           messagelink: `https://mail.google.com/mail/u/0/#inbox/${req.body.email_id}`,
@@ -473,7 +473,7 @@ class MailController {
         const update = await emailservice.updateEmail(
           { id: req.body.id },
           {
-            draft_reply: req.body.content,
+            draft_reply: encrypt(req.body.content), // Encrypt the body
             draft_email_id: draftResponse.data.id,
           }
         );
