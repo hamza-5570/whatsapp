@@ -19,7 +19,7 @@ const oAuthClient = new OAuth2Client(
 );
 // Must match your OAuth redirect URI
 class MailController {
-  sendMail = async (req, res) => {
+  GetMail = async (req, res) => {
     try {
       // 1. Get token from DB
       const token = await tokenServices.getTokenByUserId({
@@ -153,6 +153,54 @@ class MailController {
               date: date,
             });
 
+            // Recursive function to find all attachment parts
+            function findAttachments(parts = []) {
+              let attachments = [];
+              for (const part of parts) {
+                if (part.filename && part.body && part.body.attachmentId) {
+                  attachments.push({
+                    filename: part.filename,
+                    mimeType: part.mimeType,
+                    attachmentId: part.body.attachmentId,
+                  });
+                }
+                if (part.parts) {
+                  attachments = attachments.concat(findAttachments(part.parts));
+                }
+              }
+              return attachments;
+            }
+
+            const attachmentsMeta = findAttachments(
+              fullMsg.data.payload.parts || []
+            );
+
+            // Download actual attachment content
+            const attachments = [];
+            for (const att of attachmentsMeta) {
+              try {
+                const attachmentData =
+                  await gmail.users.messages.attachments.get({
+                    userId: "me",
+                    messageId: msg.id,
+                    id: att.attachmentId,
+                  });
+
+                attachments.push({
+                  filename: att.filename,
+                  mimeType: att.mimeType,
+                  size: attachmentData.data.size,
+                  data: attachmentData.data.data, // base64-encoded
+                });
+              } catch (err) {
+                console.error(
+                  "Attachment fetch failed:",
+                  att.filename,
+                  err.message
+                );
+              }
+            }
+
             const emailObject = {
               email_id: msg.id,
               received_at: date,
@@ -166,6 +214,7 @@ class MailController {
                 allLabelIds,
               deliverdto: deliveredTo,
               user_id: req.body.user_id,
+              attachments, // ✅ Store as array in JSONB field
             };
 
             emailList.push(emailObject);
