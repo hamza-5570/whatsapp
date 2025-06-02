@@ -436,6 +436,15 @@ class MailController {
             draft_reply: encrypt(req.body.content), // Encrypt the body
           }
         );
+        //
+        const newmail = await emailservice.updateEmail(
+          {
+            email_id: email.dataValues.draft_email_id,
+          },
+          {
+            body: encrypt(req.body.content), // Encrypt the body
+          }
+        );
         console.log("Draft updated in DB:", update);
         Response.success(res, messageUtil.OK);
       } else {
