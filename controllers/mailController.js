@@ -558,7 +558,7 @@ class MailController {
 
       // update email status
       await emailservice.updateEmail(
-        { email_id: mail.data.id },
+        { email_id: email.dataValues.draft_email_id },
         {
           labels: "SENT",
         }
