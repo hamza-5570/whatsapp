@@ -3,7 +3,10 @@ dotenv.config();
 import crypto from "crypto";
 
 function encrypt(text) {
-  const iv = crypto.randomBytes(16).toString("hex");
+  const iv = process.env.IV;
+  if (!iv) {
+    throw new Error("IV is not defined in the environment variables.");
+  }
   const key = process.env.SECRET_KEY;
   const cipher = crypto.createCipheriv(
     "aes-256-cbc",

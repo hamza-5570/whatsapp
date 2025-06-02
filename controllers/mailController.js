@@ -25,12 +25,12 @@ class MailController {
       const token = await tokenServices.getTokenByUserId({
         user_id: req.body.user_id,
       });
+      console.log("Token fetched:", token);
       // 2. Refresh token
       oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
-
       // 3. Update token in DB
       await tokenServices.updateToken(
         { user_id: req.body.user_id },
@@ -88,7 +88,6 @@ class MailController {
 
       // This is for email fetching (includes system labels but excludes Imap/CATEGORY_)
       const allLabelIds = cleanedAllLabels.map((label) => label.id);
-
       // -------------------------------
       // 6. Helper: FETCH EMAILS
       // -------------------------------
