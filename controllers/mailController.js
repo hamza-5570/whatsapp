@@ -12,6 +12,7 @@ import cleanEmailWithClaude from "../utilities/claude.js";
 import sendPromptWithEmail from "../utilities/openAi.js";
 import { prompt, promptForReply } from "../utilities/prompt.js";
 import encrypt from "../utilities/encrypt.js";
+import decrypt from "../utilities/decrypt.js";
 const oAuthClient = new OAuth2Client(
   process.env.GMAIL_CLIENT_ID,
   process.env.GMAIL_CLIENT_SECRET,
@@ -297,9 +298,11 @@ class MailController {
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
       // give email to openai
 
+      let data = await decrypt(req.body.content); // Encrypt the body
+      console.log("Encrypted content:", data);
       const fullPrompt = prompt({
         subject: req.body.subject,
-        body: req.body.content,
+        body: decrypt(req.body.content), // Decrypt the body
         sender: req.body.Sender_email,
         date: req.body.date,
         emailInstructions: req.body.Email_Instructions,
