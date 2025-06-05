@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { google } from "googleapis";
 import dotenv from "dotenv";
 dotenv.config();
@@ -11,6 +12,7 @@ import labelsService from "../services/labelsServices.js";
 import cleanEmailWithClaude from "../utilities/claude.js";
 import sendPromptWithEmail from "../utilities/openAi.js";
 import { prompt, promptForReply } from "../utilities/prompt.js";
+import emailTrackingService from "../services/emailTrackingServices.js";
 import encrypt from "../utilities/encrypt.js";
 import decrypt from "../utilities/decrypt.js";
 const oAuthClient = new OAuth2Client(
@@ -523,22 +525,49 @@ class MailController {
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
-      // let fullprompt = promptForReply({ body: req.body.edited_draft_reply });
-      // const emailResponse = await sendPromptWithEmail({
-      //   fullPrompt: fullprompt,
-      // });
-
-      // // 5. Create email
-      // const rawMessage = Buffer.from(
-      //   `to: ${req.body.Deliverdto}\nSubject: ${req.body.subject}\n\n${emailResponse}`
-      // ).toString("base64");
-
       // get email
       const email = await emailservice.getEmailById({
         id: req.body.id,
       });
+      // create email tracking
+      const trackingId = crypto.randomUUID(); // Generate a unique tracking ID
+      const emailTracking = await emailTrackingService.createEmailTracking({
+        tracking_id: trackingId,
+        email_id: email.dataValues.email_id,
+      });
 
-      const mail = await gmail.users.drafts.send({
+      let draft = await gmail.users.drafts.get({
+        userId: "me",
+        id: email.dataValues.draft_email_id,
+      });
+      console.log("Draft fetched:", draft.data.message.payload);
+      let rawMessage = Buffer.from(
+        draft.data.message.payload.body.data,
+        "base64"
+      ).toString("utf-8");
+
+      const trackingPixelUrl = `https://whatsapp-9f97.onrender.com/emailTracking/status?tracking_id${trackingId}`;
+      const updatedHtml = rawMessage.replace(
+        /<\/body>/i,
+        `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body>`
+      );
+
+      // Rebuild message
+      const newRaw = Buffer.from(updatedHtml)
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      // draft = await gmail.users.drafts.update({
+      //   userId: "me",
+      //   id: email.dataValues.draft_email_id,
+      //   requestBody: {
+      //     message: {
+      //       raw: draft.data.message.raw,
+      //     },
+      //   },
+      // });
+      await gmail.users.drafts.send({
         userId: "me",
         requestBody: {
           id: email.dataValues.draft_email_id,
