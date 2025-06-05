@@ -216,14 +216,11 @@ class MailController {
               user_id: req.body.user_id,
               attachments, // ✅ Store as array in JSONB field
             };
-
+            console.log("Fetched email:", emailObject);
             emailList.push(emailObject);
           }
         } catch (err) {
-          console.error(
-            `Error fetching emails for label ${allLabelIds}:`,
-            err.message
-          );
+          console.error(`Error fetching emails for label`, err);
         }
 
         return emailList;
