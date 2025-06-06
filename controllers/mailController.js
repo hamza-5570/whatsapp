@@ -535,7 +535,8 @@ class MailController {
         tracking_id: trackingId,
         email_id: email.dataValues.email_id,
       });
-
+      const getHeader = (headers, name) =>
+        headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value;
       let draft = await gmail.users.drafts.get({
         userId: "me",
         id: email.dataValues.draft_email_id,
@@ -546,33 +547,48 @@ class MailController {
         "base64"
       ).toString("utf-8");
 
-      const trackingPixelUrl = `https://whatsapp-9f97.onrender.com/emailTracking/status?tracking_id${trackingId}`;
+      const trackingPixelUrl = `https://whatsapp-9f97.onrender.com/emailTracking/status?tracking_id=${trackingId}`;
       const updatedHtml = rawMessage.replace(
         /<\/body>/i,
         `<img src="${trackingPixelUrl}" width="1" height="1" style="display:none;" /></body>`
       );
 
-      // Rebuild message
-      const newRaw = Buffer.from(updatedHtml)
+      // 3. Get headers from original draft
+      const headers = draft.data.message.payload.headers;
+      const subject = getHeader(headers, "Subject");
+      const toEmail = getHeader(headers, "To");
+
+      // 4. Rebuild full MIME message
+      const mimeMessage =
+        `Content-Type: text/html; charset="UTF-8"\r\n` +
+        `MIME-Version: 1.0\r\n` +
+        `To: ${toEmail}\r\n` +
+        `Subject: ${subject}\r\n\r\n` +
+        `${updatedHtml}`;
+
+      // 5. Encode
+      const encodedMessage = Buffer.from(mimeMessage)
         .toString("base64")
         .replace(/\+/g, "-")
         .replace(/\//g, "_")
         .replace(/=+$/, "");
-      // draft = await gmail.users.drafts.update({
-      //   userId: "me",
-      //   id: email.dataValues.draft_email_id,
-      //   requestBody: {
-      //     message: {
-      //       raw: draft.data.message.raw,
-      //     },
-      //   },
-      // });
-      await gmail.users.drafts.send({
+
+      // 6. Update and send
+      await gmail.users.drafts.update({
+        userId: "me",
+        id: email.dataValues.draft_email_id,
+        requestBody: {
+          message: { raw: encodedMessage },
+        },
+      });
+      const gmailres = await gmail.users.drafts.send({
         userId: "me",
         requestBody: {
           id: email.dataValues.draft_email_id,
         },
       });
+      console.log("Email sent:", gmailres.data);
+
       // update email
       await emailservice.updateEmail(
         { id: req.body.id },
