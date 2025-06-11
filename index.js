@@ -1,4 +1,5 @@
 import express from "express";
+import cron from "./utilities/cronJobs.js";
 import sequelize from "./config/DataBase.js";
 import routes from "./routes/routes.js";
 import pkg from "whatsapp-web.js";

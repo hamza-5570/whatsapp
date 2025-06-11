@@ -15,6 +15,7 @@ class MailServices {
     try {
       const email = await emailservice.findOne({
         where: { ...query },
+        order: [["created_at", "DESC"]],
       });
       return email;
     } catch (error) {

@@ -22,7 +22,17 @@ class TokenServices {
       throw error;
     }
   };
-
+  getAllTokens = async (query) => {
+    try {
+      const tokens = await tokenService.findAll({
+        where: query,
+      });
+      return tokens;
+    } catch (error) {
+      console.error("Error fetching all tokens:", error);
+      throw error;
+    }
+  };
   updateToken = async (query, tokenData) => {
     try {
       const token = await tokenService.update(tokenData, {

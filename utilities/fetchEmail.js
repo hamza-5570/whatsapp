@@ -1,0 +1,119 @@
+import encrypt from "./encrypt.js";
+import { google } from "googleapis";
+import { OAuth2Client } from "google-auth-library";
+import userService from "../services/userServices.js";
+import emailService from "../services/mailServices.js";
+import tokenServices from "../services/tokenServices.js";
+import dotenv from "dotenv";
+dotenv.config();
+const oAuthClient = new OAuth2Client(
+  process.env.GMAIL_CLIENT_ID,
+  process.env.GMAIL_CLIENT_SECRET,
+  process.env.GMAIL_REDIRECT_URI
+);
+const fetchLatestEmailsForAllUsers = async () => {
+  // get token form token table
+  const tokens = await tokenServices.getAllTokens();
+
+  tokens.forEach(async (token) => {
+    try {
+      // 1. Refresh Token
+
+      oAuthClient.setCredentials({
+        refresh_token: token.dataValues.refresh_token,
+      });
+      const { credentials } = await oAuthClient.refreshAccessToken();
+
+      const oAuth2Client = new google.auth.OAuth2();
+      oAuth2Client.setCredentials({ access_token: credentials.access_token });
+      const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
+
+      // 2. Get last fetch timestamp
+      const latestCreatedAt = emailService.getEmailById({
+        user_id: token.dataValues.user_id,
+      });
+      const lastFetched = latestCreatedAt
+        ? Math.floor(new Date(latestCreatedAt.created_at).getTime() / 1000)
+        : null;
+
+      const q = lastFetched ? `after:${lastFetched}` : "";
+      console.log("ider aya");
+      // 3. Fetch new emails
+      const res = await gmail.users.messages.list({
+        userId: "me",
+        labelIds: ["INBOX"],
+        q,
+        maxResults: 20,
+      });
+      console.log("ider bhi aya");
+      const messages = res.data.messages || [];
+
+      const newEmails = [];
+      let maxReceivedAt = lastFetched;
+
+      for (const msg of messages) {
+        const fullMsg = await gmail.users.messages.get({
+          userId: "me",
+          id: msg.id,
+          format: "full",
+        });
+
+        const headers = fullMsg.data.payload.headers || [];
+        const getHeader = (name) =>
+          headers.find((h) => h.name.toLowerCase() === name.toLowerCase())
+            ?.value;
+
+        const dateHeader = getHeader("Date");
+        const receivedAt = new Date(dateHeader);
+
+        // Skip older emails just in case
+        if (lastFetched && receivedAt.getTime() <= lastFetched * 1000) continue;
+
+        maxReceivedAt = Math.max(maxReceivedAt || 0, receivedAt.getTime());
+
+        // Process sender, subject, body, etc...
+        const fromHeader = getHeader("From");
+        const match = fromHeader?.match(/(.*)<(.*)>/);
+        const senderName = match?.[1]?.trim() || null;
+        const senderEmail = match?.[2]?.trim() || fromHeader;
+
+        const bodyPart =
+          fullMsg.data.payload?.parts?.find(
+            (part) => part.mimeType === "text/plain"
+          ) || fullMsg.data.payload;
+
+        const body = Buffer.from(bodyPart?.body?.data || "", "base64").toString(
+          "utf8"
+        );
+
+        newEmails.push({
+          email_id: msg.id,
+          received_at: receivedAt,
+          body: encrypt(body),
+          subject: getHeader("Subject"),
+          "Sender email": senderEmail,
+          sender: senderName,
+          messagelink: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
+          user_id: token.dataValues.user_id,
+        });
+      }
+
+      // 4. Save new emails
+      for (const email of newEmails) {
+        await emailService.createEmail(email);
+      }
+
+      console.log(
+        `Fetched ${newEmails.length} new emails for token ${token.dataValues.user_id}`
+      );
+    } catch (err) {
+      console.error(
+        "Error fetching emails for token:",
+        token.dataValues.user_id,
+        err
+      );
+    }
+  });
+};
+
+export default fetchLatestEmailsForAllUsers;
