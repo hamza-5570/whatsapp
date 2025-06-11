@@ -41,9 +41,8 @@ const fetchLatestEmailsForAllUsers = async () => {
       // 3. Fetch new emails
       const res = await gmail.users.messages.list({
         userId: "me",
-        labelIds: ["INBOX"],
         q,
-        maxResults: 20,
+        maxResults: 50,
       });
       console.log("ider bhi aya");
       const messages = res.data.messages || [];
