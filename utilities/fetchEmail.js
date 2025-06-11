@@ -29,7 +29,7 @@ const fetchLatestEmailsForAllUsers = async () => {
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
       // 2. Get last fetch timestamp
-      const latestCreatedAt = emailService.getEmailById({
+      const latestCreatedAt = await emailService.getEmailById({
         user_id: token.dataValues.user_id,
       });
       const lastFetched = latestCreatedAt
@@ -37,14 +37,12 @@ const fetchLatestEmailsForAllUsers = async () => {
         : null;
 
       const q = lastFetched ? `after:${lastFetched}` : "";
-      console.log("ider aya");
       // 3. Fetch new emails
       const res = await gmail.users.messages.list({
         userId: "me",
         q,
         maxResults: 50,
       });
-      console.log("ider bhi aya");
       const messages = res.data.messages || [];
 
       const newEmails = [];
