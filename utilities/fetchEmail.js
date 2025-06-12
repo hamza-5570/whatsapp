@@ -12,17 +12,15 @@ const oAuthClient = new OAuth2Client(
   process.env.GMAIL_REDIRECT_URI
 );
 const fetchLatestEmailsForAllUsers = async () => {
-  // get token form token table
   const tokens = await tokenServices.getAllTokens();
 
-  const tasks = tokens.forEach(async (token) => {
+  const tasks = tokens.map(async (token) => {
     try {
-      // 1. Refresh Token
-
       oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
+
       await tokenServices.updateToken(
         { user_id: token.dataValues.user_id },
         {
@@ -30,27 +28,26 @@ const fetchLatestEmailsForAllUsers = async () => {
           refresh_token: credentials.refresh_token,
         }
       );
+
       const oAuth2Client = new google.auth.OAuth2();
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
 
-      // 2. Get last fetch timestamp
       const latestCreatedAt = await emailService.getEmailById({
         user_id: token.dataValues.user_id,
       });
+
       const lastFetched = latestCreatedAt
         ? Math.floor(new Date(latestCreatedAt.created_at).getTime() / 1000)
         : null;
-
-      const q = lastFetched ? `after:${lastFetched}` : "";
-      // 3. Fetch new emails
       const res = await gmail.users.messages.list({
         userId: "me",
-        q,
+        // Fetch emails newer than 1 hour
+        q: "newer_than:1d",
         maxResults: 50,
       });
+      console.log("data aya", res.data);
       const messages = res.data.messages || [];
-
       const newEmails = [];
       let maxReceivedAt = lastFetched;
 
@@ -67,14 +64,13 @@ const fetchLatestEmailsForAllUsers = async () => {
             ?.value;
 
         const dateHeader = getHeader("Date");
-        const receivedAt = new Date(dateHeader);
+        if (!dateHeader) continue;
 
-        // Skip older emails just in case
+        const receivedAt = new Date(dateHeader);
         if (lastFetched && receivedAt.getTime() <= lastFetched * 1000) continue;
 
         maxReceivedAt = Math.max(maxReceivedAt || 0, receivedAt.getTime());
 
-        // Process sender, subject, body, etc...
         const fromHeader = getHeader("From");
         const match = fromHeader?.match(/(.*)<(.*)>/);
         const senderName = match?.[1]?.trim() || null;
@@ -101,8 +97,8 @@ const fetchLatestEmailsForAllUsers = async () => {
         });
       }
 
-      // 4. Save new emails
       for (const email of newEmails) {
+        console.log(email);
         await emailService.createEmail(email);
       }
 
@@ -117,6 +113,7 @@ const fetchLatestEmailsForAllUsers = async () => {
       );
     }
   });
+
   await Promise.all(tasks);
 };
 
