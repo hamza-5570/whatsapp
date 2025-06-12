@@ -35,7 +35,9 @@ class TokenServices {
   };
   updateToken = async (query) => {
     try {
-      const token = await tokenService.upsert(query);
+      const token = await tokenService.upsert(query, {
+        conflictFields: ["user_id"], // ✅ specify ON CONFLICT(user_id)
+      });
       return token;
     } catch (error) {
       console.error("Error updating token:", error);

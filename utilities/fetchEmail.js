@@ -13,20 +13,24 @@ const oAuthClient = new OAuth2Client(
 );
 const fetchLatestEmailsForAllUsers = async () => {
   const tokens = await tokenServices.getAllTokens();
-
-  tokens.map(async (token) => {
+  for (const token of tokens) {
     try {
-      oAuthClient.setCredentials({
+      console.log("Processing token for user:", token.dataValues.refresh_token);
+      await oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
-
-      await tokenServices.updateToken({
+      console.log(
+        token.dataValues.user_id,
+        "token user id",
+        credentials.refresh_token
+      );
+      let update = await tokenServices.updateToken({
         user_id: token.dataValues.user_id,
         access_token: credentials.access_token,
         refresh_token: credentials.refresh_token,
       });
-
+      console.log("Updated token:", update);
       const oAuth2Client = new google.auth.OAuth2();
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
@@ -48,7 +52,7 @@ const fetchLatestEmailsForAllUsers = async () => {
       let maxReceivedAt = lastFetched;
 
       for (const msg of messages) {
-        console.log("Processing message:", msg);
+        // console.log("Processing message:", msg);
         const fullMsg = await gmail.users.messages.get({
           userId: "me",
           id: msg.id,
@@ -108,7 +112,7 @@ const fetchLatestEmailsForAllUsers = async () => {
         err
       );
     }
-  });
+  }
 
   // await Promise.all(tasks);
 };
