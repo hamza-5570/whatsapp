@@ -35,13 +35,11 @@ class MailController {
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
       // 3. Update token in DB
-      await tokenServices.updateToken(
-        { user_id: req.body.user_id },
-        {
-          access_token: credentials.access_token,
-          refresh_token: credentials.refresh_token,
-        }
-      );
+      await tokenServices.updateToken({
+        user_id: req.body.user_id,
+        access_token: credentials.access_token,
+        refresh_token: credentials.refresh_token,
+      });
 
       // 4. Init Gmail client
       const oAuth2Client = new google.auth.OAuth2();

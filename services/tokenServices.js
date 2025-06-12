@@ -33,11 +33,9 @@ class TokenServices {
       throw error;
     }
   };
-  updateToken = async (query, tokenData) => {
+  updateToken = async (query) => {
     try {
-      const token = await tokenService.update(tokenData, {
-        where: query,
-      });
+      const token = await tokenService.upsert(query);
       return token;
     } catch (error) {
       console.error("Error updating token:", error);

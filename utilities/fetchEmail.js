@@ -21,13 +21,11 @@ const fetchLatestEmailsForAllUsers = async () => {
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
 
-      await tokenServices.updateToken(
-        { user_id: token.dataValues.user_id },
-        {
-          access_token: credentials.access_token,
-          refresh_token: credentials.refresh_token,
-        }
-      );
+      await tokenServices.updateToken({
+        user_id: token.dataValues.user_id,
+        access_token: credentials.access_token,
+        refresh_token: credentials.refresh_token,
+      });
 
       const oAuth2Client = new google.auth.OAuth2();
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
@@ -42,7 +40,6 @@ const fetchLatestEmailsForAllUsers = async () => {
         : null;
       const res = await gmail.users.messages.list({
         userId: "me",
-        // Fetch emails newer than 1 hour
         q: "newer_than:1d",
         maxResults: 50,
       });
@@ -51,6 +48,7 @@ const fetchLatestEmailsForAllUsers = async () => {
       let maxReceivedAt = lastFetched;
 
       for (const msg of messages) {
+        console.log("Processing message:", msg);
         const fullMsg = await gmail.users.messages.get({
           userId: "me",
           id: msg.id,
@@ -83,7 +81,7 @@ const fetchLatestEmailsForAllUsers = async () => {
         const body = Buffer.from(bodyPart?.body?.data || "", "base64").toString(
           "utf8"
         );
-
+        // console.log("subject", getHeader("Subject"));
         newEmails.push({
           email_id: msg.id,
           received_at: receivedAt,
