@@ -16,6 +16,7 @@ const Tokens = sequelize.define(
     user_id: {
       type: DataTypes.UUID,
       allowNull: false,
+      primaryKey: true,
       unique: true,
     },
     access_token: {
