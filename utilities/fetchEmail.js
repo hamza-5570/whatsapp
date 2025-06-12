@@ -15,7 +15,7 @@ const fetchLatestEmailsForAllUsers = async () => {
   // get token form token table
   const tokens = await tokenServices.getAllTokens();
 
-  tokens.forEach(async (token) => {
+  const tasks = tokens.forEach(async (token) => {
     try {
       // 1. Refresh Token
 
@@ -117,6 +117,7 @@ const fetchLatestEmailsForAllUsers = async () => {
       );
     }
   });
+  await Promise.all(tasks);
 };
 
 export default fetchLatestEmailsForAllUsers;
