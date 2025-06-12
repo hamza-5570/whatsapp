@@ -23,7 +23,13 @@ const fetchLatestEmailsForAllUsers = async () => {
         refresh_token: token.dataValues.refresh_token,
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
-
+      await tokenServices.updateToken(
+        { user_id: token.dataValues.user_id },
+        {
+          access_token: credentials.access_token,
+          refresh_token: credentials.refresh_token,
+        }
+      );
       const oAuth2Client = new google.auth.OAuth2();
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
