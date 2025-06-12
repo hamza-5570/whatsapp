@@ -15,22 +15,16 @@ const fetchLatestEmailsForAllUsers = async () => {
   const tokens = await tokenServices.getAllTokens();
   for (const token of tokens) {
     try {
-      console.log("Processing token for user:", token.dataValues.refresh_token);
       await oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
       });
       const { credentials } = await oAuthClient.refreshAccessToken();
-      console.log(
-        token.dataValues.user_id,
-        "token user id",
-        credentials.refresh_token
-      );
-      let update = await tokenServices.updateToken({
+
+      await tokenServices.updateToken({
         user_id: token.dataValues.user_id,
         access_token: credentials.access_token,
         refresh_token: credentials.refresh_token,
       });
-      console.log("Updated token:", update);
       const oAuth2Client = new google.auth.OAuth2();
       oAuth2Client.setCredentials({ access_token: credentials.access_token });
       const gmail = google.gmail({ version: "v1", auth: oAuth2Client });
@@ -52,7 +46,6 @@ const fetchLatestEmailsForAllUsers = async () => {
       let maxReceivedAt = lastFetched;
 
       for (const msg of messages) {
-        // console.log("Processing message:", msg);
         const fullMsg = await gmail.users.messages.get({
           userId: "me",
           id: msg.id,
@@ -68,7 +61,7 @@ const fetchLatestEmailsForAllUsers = async () => {
         if (!dateHeader) continue;
 
         const receivedAt = new Date(dateHeader);
-        if (lastFetched && receivedAt.getTime() >= lastFetched * 1000) continue;
+        if (lastFetched && receivedAt.getTime() <= lastFetched * 1000) continue;
 
         maxReceivedAt = Math.max(maxReceivedAt || 0, receivedAt.getTime());
 
@@ -85,7 +78,6 @@ const fetchLatestEmailsForAllUsers = async () => {
         const body = Buffer.from(bodyPart?.body?.data || "", "base64").toString(
           "utf8"
         );
-        // console.log("subject", getHeader("Subject"));
         newEmails.push({
           email_id: msg.id,
           received_at: receivedAt,
