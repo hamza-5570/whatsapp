@@ -14,7 +14,7 @@ const oAuthClient = new OAuth2Client(
 const fetchLatestEmailsForAllUsers = async () => {
   const tokens = await tokenServices.getAllTokens();
 
-  const tasks = tokens.map(async (token) => {
+  tokens.map(async (token) => {
     try {
       oAuthClient.setCredentials({
         refresh_token: token.dataValues.refresh_token,
@@ -46,7 +46,6 @@ const fetchLatestEmailsForAllUsers = async () => {
         q: "newer_than:1d",
         maxResults: 50,
       });
-      console.log("data aya", res.data);
       const messages = res.data.messages || [];
       const newEmails = [];
       let maxReceivedAt = lastFetched;
@@ -67,7 +66,7 @@ const fetchLatestEmailsForAllUsers = async () => {
         if (!dateHeader) continue;
 
         const receivedAt = new Date(dateHeader);
-        if (lastFetched && receivedAt.getTime() <= lastFetched * 1000) continue;
+        if (lastFetched && receivedAt.getTime() >= lastFetched * 1000) continue;
 
         maxReceivedAt = Math.max(maxReceivedAt || 0, receivedAt.getTime());
 
@@ -98,7 +97,6 @@ const fetchLatestEmailsForAllUsers = async () => {
       }
 
       for (const email of newEmails) {
-        console.log(email);
         await emailService.createEmail(email);
       }
 
@@ -114,7 +112,7 @@ const fetchLatestEmailsForAllUsers = async () => {
     }
   });
 
-  await Promise.all(tasks);
+  // await Promise.all(tasks);
 };
 
 export default fetchLatestEmailsForAllUsers;
