@@ -85,6 +85,7 @@ const fetchLatestEmailsForAllUsers = async () => {
           subject: getHeader("Subject"),
           "Sender email": senderEmail,
           sender: senderName,
+          labels: fullMsg.data.labelIds || [],
           messagelink: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
           user_id: token.dataValues.user_id,
         });
