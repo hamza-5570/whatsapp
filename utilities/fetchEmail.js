@@ -78,6 +78,7 @@ const fetchLatestEmailsForAllUsers = async () => {
         const body = Buffer.from(bodyPart?.body?.data || "", "base64").toString(
           "utf8"
         );
+        console.log(fullMsg.data);
         newEmails.push({
           email_id: msg.id,
           received_at: receivedAt,
@@ -85,7 +86,8 @@ const fetchLatestEmailsForAllUsers = async () => {
           subject: getHeader("Subject"),
           "Sender email": senderEmail,
           sender: senderName,
-          labels: fullMsg.data.labelIds || [],
+          labels:
+            fullMsg.data.labelIds?.[fullMsg.data.labelIds.length - 1] || [],
           messagelink: `https://mail.google.com/mail/u/0/#inbox/${msg.id}`,
           user_id: token.dataValues.user_id,
         });
