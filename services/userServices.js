@@ -1,4 +1,7 @@
 import userService from "../models/user.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 class UserServices {
   createUser = async (userData) => {

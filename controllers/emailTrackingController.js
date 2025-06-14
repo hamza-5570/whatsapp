@@ -1,6 +1,9 @@
 import Response from "../utilities/response.js";
 import messageUtil from "../utilities/message.js";
 import EmailTrackingServices from "../services/emailTrackingServices.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 class EmailTrackingController {
   upsertEmailTracking = async (req, res) => {
