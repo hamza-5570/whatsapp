@@ -1,5 +1,8 @@
 import { DataTypes } from "sequelize";
 import sequelize from "../config/DataBase.js";
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
 
 const Emails = sequelize.define(
   "Emails",
